@@ -58,15 +58,8 @@ export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> =
       contents: [
         {
           text: `
-            You are an expert financial auditor AI. 
-            Analyze the following pipe-delimited CSV dataset of account transactions.
-            Format: index|BA|monthly|actCode|amount
-            
-            Task:
-            1. Identify statistical anomalies in the 'amount' field. Look for values that are significantly higher or lower than the average for similar 'actCode' or general distribution.
-            2. Flag at most top 10 significant anomalies.
-            3. Provide the output in strictly valid JSON format matching the schema.
-            4. The 'reason' and 'summary' fields MUST be in Thai language (ภาษาไทย).
+            analysis data what is data and tell ba monthly act code
+             The 'reason' and 'summary' fields MUST be in Thai language (ภาษาไทย).
             
             Dataset (First ${sampleData.length} rows):
             ${dataString}
