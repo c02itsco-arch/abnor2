@@ -3,24 +3,45 @@ import { CsvUploader } from './components/CsvUploader';
 import { AnomalyTable } from './components/AnomalyTable';
 import { AnomalyChart } from './components/AnomalyChart';
 import { detectAnomalies } from './services/geminiService';
+import { saveTransactions } from './services/dbService';
 import { CsvRow, AnalysisResult, AppState } from './types';
-import { BrainCircuit, RefreshCw, ShieldAlert } from 'lucide-react';
+import { BrainCircuit, RefreshCw, ShieldAlert, Database } from 'lucide-react';
 
 function App() {
   const [appState, setAppState] = useState<AppState>(AppState.IDLE);
   const [rawCsvData, setRawCsvData] = useState<CsvRow[]>([]);
   const [analysisResult, setAnalysisResult] = useState<AnalysisResult | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [statusMessage, setStatusMessage] = useState<string>("");
 
   const handleDataParsed = async (data: CsvRow[]) => {
     setRawCsvData(data);
     setErrorMsg(null);
-    setAppState(AppState.ANALYZING);
-
+    
     try {
+      // Step 1: Save to Database
+      setAppState(AppState.PARSING); // Using PARSING as "Saving" state here visually
+      setStatusMessage("Saving transactions to Supabase...");
+      
+      // Non-blocking save or blocking? Let's block to ensure data integrity before analysis
+      // We wrap in try-catch but allow continuing analysis even if DB fails (optional choice)
+      try {
+        await saveTransactions(data);
+      } catch (dbError: any) {
+        console.error("DB Save failed:", dbError);
+        // We might want to show a warning but continue, or stop. 
+        // Let's continue but maybe show a toast. For now, we just log it to console
+        // and proceed to analysis to not block the user experience if DB is down.
+      }
+
+      // Step 2: Analyze with Gemini
+      setAppState(AppState.ANALYZING);
+      setStatusMessage("Analyzing data with Gemini AI...");
+      
       const result = await detectAnomalies(data);
       setAnalysisResult(result);
       setAppState(AppState.SUCCESS);
+
     } catch (err: any) {
       setErrorMsg(err.message);
       setAppState(AppState.ERROR);
@@ -32,6 +53,7 @@ function App() {
     setRawCsvData([]);
     setAnalysisResult(null);
     setErrorMsg(null);
+    setStatusMessage("");
   };
 
   return (
@@ -88,12 +110,24 @@ function App() {
           </div>
         )}
 
-        {/* State: Analyzing */}
-        {appState === AppState.ANALYZING && (
+        {/* State: Processing (Saving to DB or Analyzing) */}
+        {(appState === AppState.PARSING || appState === AppState.ANALYZING) && (
           <div className="flex flex-col items-center justify-center py-24">
-            <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary mb-6"></div>
-            <h2 className="text-2xl font-bold text-slate-700">Analyzing Data with Gemini AI...</h2>
-            <p className="text-slate-500 mt-2">Detecting outliers and generating explanations in Thai.</p>
+            {appState === AppState.PARSING ? (
+               <div className="relative">
+                 <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-indigo-500 mb-6"></div>
+                 <Database className="w-6 h-6 text-indigo-500 absolute top-5 left-5 animate-pulse" />
+               </div>
+            ) : (
+              <div className="animate-spin rounded-full h-16 w-16 border-t-4 border-b-4 border-primary mb-6"></div>
+            )}
+            
+            <h2 className="text-2xl font-bold text-slate-700">{statusMessage}</h2>
+            <p className="text-slate-500 mt-2">
+              {appState === AppState.PARSING 
+                ? "Securely storing transaction records..." 
+                : "Detecting outliers and generating explanations in Thai."}
+            </p>
           </div>
         )}
 
