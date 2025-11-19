@@ -40,12 +40,17 @@ const ANOMALY_SCHEMA: Schema = {
 export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> => {
   if (!apiKey) throw new Error("API Key is missing. Please check your environment variables.");
 
-  // Optimize payload: limit rows if too large to prevent token overflow.
-  // For a real app, you might summarize or batch, but here we take a robust sample.
-  const MAX_ROWS = 1500; 
+  // Optimize payload: limit rows if too large to prevent token overflow (Error 503).
+  // Reducing to 500 rows provides a good balance for a demo.
+  const MAX_ROWS = 500; 
   const sampleData = data.slice(0, MAX_ROWS); 
   
-  const csvString = JSON.stringify(sampleData);
+  // Convert to Pipe-delimited string to save tokens compared to JSON
+  // Format: index|BA|monthly|actCode|amount
+  let dataString = "index|BA|monthly|actCode|amount\n";
+  dataString += sampleData.map((row, index) => 
+    `${index}|${row.BA}|${row.monthly}|${row.actCode}|${row.amount}`
+  ).join("\n");
 
   try {
     const response = await ai.models.generateContent({
@@ -54,8 +59,8 @@ export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> =
         {
           text: `
             You are an expert financial auditor AI. 
-            Analyze the following JSON dataset of account transactions.
-            Columns: BA (Business Area), monthly (YYYYMM), actCode (Account Code), amount.
+            Analyze the following pipe-delimited CSV dataset of account transactions.
+            Format: index|BA|monthly|actCode|amount
             
             Task:
             1. Identify statistical anomalies in the 'amount' field. Look for values that are significantly higher or lower than the average for similar 'actCode' or general distribution.
@@ -64,7 +69,7 @@ export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> =
             4. The 'reason' and 'summary' fields MUST be in Thai language (ภาษาไทย).
             
             Dataset (First ${sampleData.length} rows):
-            ${csvString}
+            ${dataString}
           `
         }
       ],
@@ -78,7 +83,7 @@ export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> =
     let resultText = response.text;
     if (!resultText) throw new Error("Empty response from Gemini.");
 
-    // Robust Parsing: Remove markdown code blocks if Gemini includes them despite responseMimeType
+    // Robust Parsing: Remove markdown code blocks if Gemini includes them
     resultText = resultText.replace(/```json\n?|```/g, '').trim();
 
     const parsedResult = JSON.parse(resultText) as AnalysisResult;
@@ -86,6 +91,12 @@ export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> =
 
   } catch (error: any) {
     console.error("Gemini API Error:", error);
+    
+    // Handle 503 Overloaded specifically
+    if (error.message?.includes("503") || error.status === 503) {
+       throw new Error("AI Model is currently overloaded (503). We reduced the data sample size, but it's still busy. Please try again in a minute.");
+    }
+    
     throw new Error(error.message || "Failed to analyze data with AI.");
   }
 };
