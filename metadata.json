@@ -1,0 +1,5 @@
+{
+  "name": "Anomaly Detector AI",
+  "description": "Web application to detect financial anomalies in CSV data using Google Gemini AI.",
+  "requestFramePermissions": []
+}
