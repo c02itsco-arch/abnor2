@@ -75,8 +75,11 @@ export const detectAnomalies = async (data: CsvRow[]): Promise<AnalysisResult> =
       }
     });
 
-    const resultText = response.text;
+    let resultText = response.text;
     if (!resultText) throw new Error("Empty response from Gemini.");
+
+    // Robust Parsing: Remove markdown code blocks if Gemini includes them despite responseMimeType
+    resultText = resultText.replace(/```json\n?|```/g, '').trim();
 
     const parsedResult = JSON.parse(resultText) as AnalysisResult;
     return parsedResult;
